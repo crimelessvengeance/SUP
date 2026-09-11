@@ -7,7 +7,7 @@ from google import genai
 load_dotenv()
 
 # Get API key
-api_key = os.getenv("GEMINI_API_KEY")
+api_key = st.secrets["GEMINI_API_KEY"]
 
 if not api_key:
     st.error("GEMINI_API_KEY was not found in your .env file.")
@@ -146,7 +146,7 @@ if prompt:
     # Ask Gemini
     try:
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-3.7-flash",
             contents=contents
         )
 
