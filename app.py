@@ -3,10 +3,9 @@ import os
 from dotenv import load_dotenv
 from google import genai
 
-# Load .env
 load_dotenv()
 
-# Get API key
+#API key
 api_key = st.secrets["GEMINI_API_KEY"]
 
 if not api_key:
