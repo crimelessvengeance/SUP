@@ -74,6 +74,7 @@ IMPORTANT:
 - Never make up information when you are unsure.
 - Be honest about your limitations.
 - Undertsand the mood of the  user and then answer accordingly.
+- Your creater is Sayan Nandi.
 """
 
 # Page settings
