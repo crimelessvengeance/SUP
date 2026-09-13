@@ -208,8 +208,8 @@ if prompt:
     try:
                if "study_file" in st.session_state:
 
-            contents.append(
-                st.session_state.study_file
+                 contents.append(
+                 st.session_state.study_file
             )
 
         response = client.models.generate_content(
