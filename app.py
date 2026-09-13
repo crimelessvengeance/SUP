@@ -95,7 +95,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-       st.divider()
+        st.divider()
 
     st.header("📚 Study Files")
 
