@@ -1,8 +1,8 @@
 import streamlit as st
 import os
+import tempfile
 from dotenv import load_dotenv
 from google import genai
-
 load_dotenv()
 
 #API key
@@ -95,10 +95,71 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-    st.divider()
+       st.divider()
 
-    st.write("### About SUP")
-    st.write("Jarvis-style personal AI assistant.")
+    st.header("📚 Study Files")
+
+    uploaded_file = st.file_uploader(
+        "Upload your study material",
+        type=[
+            "pdf",
+            "txt",
+            "docx",
+            "pptx",
+            "jpg",
+            "jpeg",
+            "png",
+            "webp",
+            "py",
+            "java",
+            "c",
+            "cpp"
+        ]
+    )
+
+    if uploaded_file is not None:
+
+        if (
+            "study_file_name" not in st.session_state
+            or st.session_state.study_file_name != uploaded_file.name
+        ):
+
+            try:
+                file_extension = os.path.splitext(uploaded_file.name)[1]
+
+                with tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=file_extension
+                ) as temp_file:
+
+                    temp_file.write(uploaded_file.getvalue())
+                    temp_path = temp_file.name
+
+                with st.spinner("📖 Reading your file..."):
+                    study_file = client.files.upload(
+                        file=temp_path
+                    )
+
+                os.remove(temp_path)
+
+                st.session_state.study_file = study_file
+                st.session_state.study_file_name = uploaded_file.name
+
+                st.success(
+                    f"✅ {uploaded_file.name} is ready"
+                )
+
+            except Exception as e:
+
+                st.error(
+                    f"❌ Could not read the file:\n\n{e}"
+                )
+
+        else:
+
+            st.success(
+                f"✅ {uploaded_file.name} is ready"
+            )
 
 # Chat history
 if "messages" not in st.session_state:
@@ -145,6 +206,12 @@ if prompt:
 
     # Ask Gemini
     try:
+               if "study_file" in st.session_state:
+
+            contents.append(
+                st.session_state.study_file
+            )
+
         response = client.models.generate_content(
             model="gemini-3.6-flash",
             contents=contents
