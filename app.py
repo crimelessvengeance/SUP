@@ -240,13 +240,13 @@ if prompt:
     # Display response
     with st.chat_message("assistant"):
         st.write(answer)
-```
+
 
 ### The specific error
 
 Your original code had this:
 
-```python
+
 try:
                if "study_file" in st.session_state:
 
@@ -255,13 +255,13 @@ try:
             )
 
         response = client.models.generate_content(
-```
+
 
 Python expects everything inside `try:` to have consistent indentation.
 
 It should be:
 
-```python
+
 try:
 
     if "study_file" in st.session_state:
@@ -273,7 +273,7 @@ try:
         model="gemini-3.6-flash",
         contents=contents
     )
-```
+
 
 So **replace the whole file**, save it, and redeploy Streamlit. That should remove the `IndentationError` errors you've been getting.
 
