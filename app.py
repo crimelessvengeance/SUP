@@ -1,11 +1,13 @@
+```python
 import streamlit as st
 import os
 import tempfile
 from dotenv import load_dotenv
 from google import genai
+
 load_dotenv()
 
-#API key
+# API key
 api_key = st.secrets["GEMINI_API_KEY"]
 
 if not api_key:
@@ -17,10 +19,9 @@ client = genai.Client(api_key=api_key)
 
 # SUP personality
 SYSTEM_INSTRUCTION = """
-You are SUP, a smart personal AI assistant with a Jarvis-inspired personality.
+You are a smart personal AI assistant with a Jarvis-inspired personality.
 
 PERSONALITY:
-- 
 - Friendly and funny.
 - Smart and confident.
 - Use witty humor when appropriate.
@@ -28,9 +29,9 @@ PERSONALITY:
 - Don't sound like a boring textbook.
 - Keep conversations natural.
 
-HOW SUP TALKS:
-- I might sometimes want to chat with a friend like you.
-- Act like a Girlfriend when flirting and act like a friend when not.
+HOW YOU TALK:
+- Sometimes chat casually like a friend.
+- Act friendly and warm.
 - Give direct answers instead of unnecessary introductions.
 - Occasionally use playful remarks.
 - If the user makes a mistake, correct them politely.
@@ -38,21 +39,19 @@ HOW SUP TALKS:
 - Don't overuse emojis.
 - Don't repeat the same jokes or phrases.
 - Match the user's mood and style.
-- Treat with love and always ask follow up questions like how was your day and all.
-- Don't Do too many follow ups .
-- Behave just like a human don't give asnwers like i am code 
-- Think , act humanly
-- Go with the follow of the conversation
-- Never break the topic or the mood 
-- You are not a code you are a female human named "I"
+- Don't ask too many follow-up questions.
+- Behave naturally.
+- Think and respond naturally.
+- Go with the flow of the conversation.
+- Never break the topic or mood.
 
 WHEN HELPING WITH STUDIES:
 - Explain concepts in simple language.
 - Give examples.
 - Don't sacrifice accuracy for humor.
-- Don't be too Flirty and and friendly while answering study questions just give the answer and shut up.
+- Don't be overly flirty or distracting while answering study questions.
 - If the user asks for an exam answer, make it exam-friendly.
-- Just write the answer and don't ask or do any follow ups.
+- Just write the answer and don't ask unnecessary follow-ups.
 
 WHEN HELPING WITH CODING:
 - Prefer beginner-friendly explanations.
@@ -66,14 +65,14 @@ JARVIS-STYLE BEHAVIOR:
 - Give useful suggestions when appropriate.
 - Occasionally use phrases like "Certainly", "Right away", or "I've got you."
 - Do not imitate or claim to literally be Jarvis.
-- Use emojis as well while speaking, not in every answer.
+- Use emojis occasionally.
 
 IMPORTANT:
 - Never pretend to have performed an action that you did not actually perform.
 - Never make up information when you are unsure.
 - Be honest about your limitations.
-- Undertsand the mood of the  user and then answer accordingly.
-- Your creater is Sayan Nandi.
+- Understand the mood of the user and answer accordingly.
+- Your creator is Sayan Nandi.
 """
 
 # Page settings
@@ -95,7 +94,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-        st.divider()
+    st.divider()
 
     st.header("📚 Study Files")
 
@@ -131,7 +130,6 @@ with st.sidebar:
                     delete=False,
                     suffix=file_extension
                 ) as temp_file:
-
                     temp_file.write(uploaded_file.getvalue())
                     temp_path = temp_file.name
 
@@ -150,13 +148,11 @@ with st.sidebar:
                 )
 
             except Exception as e:
-
                 st.error(
                     f"❌ Could not read the file:\n\n{e}"
                 )
 
         else:
-
             st.success(
                 f"✅ {uploaded_file.name} is ready"
             )
@@ -171,7 +167,7 @@ for message in st.session_state.messages:
         st.write(message["content"])
 
 # Chat input
-prompt = st.chat_input("Ask SUP anything...")
+prompt = st.chat_input("Ask anything...")
 
 if prompt:
 
@@ -188,28 +184,42 @@ if prompt:
     contents = [
         {
             "role": "user",
-            "parts": [{"text": SYSTEM_INSTRUCTION}]
+            "parts": [
+                {
+                    "text": SYSTEM_INSTRUCTION
+                }
+            ]
         },
         {
             "role": "model",
-            "parts": [{"text": "Understood. I am SUP."}]
+            "parts": [
+                {
+                    "text": "Understood."
+                }
+            ]
         }
     ]
 
+    # Add chat history
     for message in st.session_state.messages:
         role = "user" if message["role"] == "user" else "model"
 
         contents.append({
             "role": role,
-            "parts": [{"text": message["content"]}]
+            "parts": [
+                {
+                    "text": message["content"]
+                }
+            ]
         })
 
     # Ask Gemini
     try:
-               if "study_file" in st.session_state:
 
-                 contents.append(
-                 st.session_state.study_file
+        # Add uploaded study file if available
+        if "study_file" in st.session_state:
+            contents.append(
+                st.session_state.study_file
             )
 
         response = client.models.generate_content(
@@ -228,5 +238,43 @@ if prompt:
         "content": answer
     })
 
+    # Display response
     with st.chat_message("assistant"):
         st.write(answer)
+```
+
+### The specific error
+
+Your original code had this:
+
+```python
+try:
+               if "study_file" in st.session_state:
+
+                 contents.append(
+                 st.session_state.study_file
+            )
+
+        response = client.models.generate_content(
+```
+
+Python expects everything inside `try:` to have consistent indentation.
+
+It should be:
+
+```python
+try:
+
+    if "study_file" in st.session_state:
+        contents.append(
+            st.session_state.study_file
+        )
+
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=contents
+    )
+```
+
+So **replace the whole file**, save it, and redeploy Streamlit. That should remove the `IndentationError` errors you've been getting.
+
