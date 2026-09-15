@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 import os
 import time
@@ -1520,4 +1520,3 @@ st.divider()
 st.caption(
     "🤖 SUP • Personal AI Assistant"
 )
-```
