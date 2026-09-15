@@ -22,7 +22,7 @@ st.set_page_config(
 
 
 # ============================================================
-# API KEY
+# LOAD API KEY
 # ============================================================
 
 load_dotenv()
@@ -32,22 +32,26 @@ try:
 except Exception:
     api_key = os.getenv("GEMINI_API_KEY")
 
+
 if not api_key:
     st.error("GEMINI_API_KEY was not found.")
+
     st.info(
         "For Streamlit Cloud, add GEMINI_API_KEY under "
         "Settings → Secrets."
     )
+
     st.stop()
 
 
 # ============================================================
-# GEMINI CLIENT
+# CONNECT TO GEMINI
 # ============================================================
 
 client = genai.Client(api_key=api_key)
 
 MODEL_NAME = "gemini-3.6-flash"
+
 VIDEO_MODEL = "veo-3.1-generate-preview"
 
 
@@ -81,27 +85,13 @@ Important:
 
 
 # ============================================================
-# SESSION STATE
-# ============================================================
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-if "study_points" not in st.session_state:
-    st.session_state.study_points = 0
-
-
-# ============================================================
 # GEMINI TEXT GENERATION
 # ============================================================
 
-def generate_text(contents, system_instruction=SYSTEM_INSTRUCTION):
-    """
-    Generate text using Gemini.
-
-    Includes automatic retries for temporary 503/high-demand
-    errors.
-    """
+def generate_text(
+    contents,
+    system_instruction=SYSTEM_INSTRUCTION
+):
 
     config = types.GenerateContentConfig(
         system_instruction=system_instruction
@@ -112,6 +102,7 @@ def generate_text(contents, system_instruction=SYSTEM_INSTRUCTION):
     for attempt in range(max_retries):
 
         try:
+
             response = client.models.generate_content(
                 model=MODEL_NAME,
                 contents=contents,
@@ -143,11 +134,12 @@ def generate_text(contents, system_instruction=SYSTEM_INSTRUCTION):
                 time.sleep(wait_time)
 
             else:
+
                 raise e
 
 
 # ============================================================
-# FFMPEG
+# FFmpeg CHECK
 # ============================================================
 
 def check_ffmpeg():
@@ -168,6 +160,10 @@ def check_ffmpeg():
         return False
 
 
+# ============================================================
+# RUN FFMPEG
+# ============================================================
+
 def run_ffmpeg(command):
 
     result = subprocess.run(
@@ -187,30 +183,43 @@ def run_ffmpeg(command):
 
 
 # ============================================================
-# SAVE STREAMLIT UPLOAD TO CLOUD TEMPORARY STORAGE
+# SAVE UPLOADED FILE
 # ============================================================
 
-def save_uploaded_file(uploaded_file, suffix=None):
+def save_uploaded_file(
+    uploaded_file,
+    suffix=None
+):
 
     if suffix is None:
-        suffix = Path(uploaded_file.name).suffix
+
+        suffix = Path(
+            uploaded_file.name
+        ).suffix
 
     temp_file = tempfile.NamedTemporaryFile(
         delete=False,
         suffix=suffix
     )
 
-    temp_file.write(uploaded_file.getbuffer())
+    temp_file.write(
+        uploaded_file.getbuffer()
+    )
+
     temp_file.close()
 
     return temp_file.name
 
 
 # ============================================================
-# VIDEO EDITING FUNCTIONS
+# TRIM VIDEO
 # ============================================================
 
-def trim_video(input_path, start_time, duration):
+def trim_video(
+    input_path,
+    start_time,
+    duration
+):
 
     output_path = tempfile.NamedTemporaryFile(
         delete=False,
@@ -237,7 +246,6 @@ def trim_video(input_path, start_time, duration):
 
     except Exception:
 
-        # Fallback if stream-copy doesn't work
         command = [
             "ffmpeg",
             "-y",
@@ -259,7 +267,93 @@ def trim_video(input_path, start_time, duration):
     return output_path
 
 
-def resize_video(input_path, width, height):
+# ============================================================
+# MERGE VIDEOS
+# ============================================================
+
+def merge_videos(video_paths):
+
+    list_file = tempfile.NamedTemporaryFile(
+        delete=False,
+        mode="w",
+        suffix=".txt"
+    )
+
+    for path in video_paths:
+
+        # Convert path to Linux-style path
+        # for Streamlit Cloud.
+
+        clean_path = str(
+            Path(path).resolve()
+        ).replace("\\", "/")
+
+        list_file.write(
+            f"file '{clean_path}'\n"
+        )
+
+    list_file.close()
+
+    output_path = tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".mp4"
+    ).name
+
+    # First try stream copying.
+
+    command = [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        list_file.name,
+        "-c",
+        "copy",
+        output_path
+    ]
+
+    try:
+
+        run_ffmpeg(command)
+
+    except Exception:
+
+        # If videos have different codecs/settings,
+        # re-encode them.
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            list_file.name,
+            "-c:v",
+            "libx264",
+            "-c:a",
+            "aac",
+            output_path
+        ]
+
+        run_ffmpeg(command)
+
+    return output_path
+
+
+# ============================================================
+# RESIZE VIDEO
+# ============================================================
+
+def resize_video(
+    input_path,
+    width,
+    height
+):
 
     output_path = tempfile.NamedTemporaryFile(
         delete=False,
@@ -285,6 +379,10 @@ def resize_video(input_path, width, height):
     return output_path
 
 
+# ============================================================
+# EXTRACT AUDIO
+# ============================================================
+
 def extract_audio(input_path):
 
     output_path = tempfile.NamedTemporaryFile(
@@ -308,109 +406,14 @@ def extract_audio(input_path):
     return output_path
 
 
-def merge_videos(video_paths):
-
-    list_file = tempfile.NamedTemporaryFile(
-        delete=False,
-        mode="w",
-        suffix=".txt"
-    )
-
-    for path in video_paths:
-        list_file.write(
-            f"file '{path.replace(chr(39), chr(39)+chr(92)+chr(39)+chr(39)}'\n"
-        )
-
-    list_file.close()
-
-    output_path = tempfile.NamedTemporaryFile(
-        delete=False,
-        suffix=".mp4"
-    ).name
-
-    command = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        list_file.name,
-        "-c",
-        "copy",
-        output_path
-    ]
-
-    try:
-
-        run_ffmpeg(command)
-
-    except Exception:
-
-        # Fallback re-encoding
-        command = [
-            "ffmpeg",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            list_file.name,
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac",
-            output_path
-        ]
-
-        run_ffmpeg(command)
-
-    return output_path
-
-
 # ============================================================
-# GEMINI VIDEO ANALYSIS
+# GENERATE VIDEO FROM TEXT
 # ============================================================
 
-def analyze_video(video_path, prompt):
-
-    uploaded_file = client.files.upload(
-        file=video_path
-    )
-
-    # Wait until Gemini finishes processing the video.
-    while uploaded_file.state.name == "PROCESSING":
-
-        time.sleep(3)
-
-        uploaded_file = client.files.get(
-            name=uploaded_file.name
-        )
-
-    if uploaded_file.state.name == "FAILED":
-
-        raise RuntimeError(
-            "Gemini failed to process the uploaded video."
-        )
-
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=[
-            uploaded_file,
-            prompt
-        ]
-    )
-
-    return response.text
-
-
-# ============================================================
-# AI VIDEO GENERATION
-# ============================================================
-
-def generate_video(prompt, aspect_ratio):
+def generate_video(
+    prompt,
+    aspect_ratio
+):
 
     operation = client.models.generate_videos(
         model=VIDEO_MODEL,
@@ -436,7 +439,9 @@ def generate_video(prompt, aspect_ratio):
 
     progress_placeholder.empty()
 
-    generated_video = operation.response.generated_videos[0]
+    generated_video = (
+        operation.response.generated_videos[0]
+    )
 
     output_file = tempfile.NamedTemporaryFile(
         delete=False,
@@ -452,7 +457,7 @@ def generate_video(prompt, aspect_ratio):
 
 
 # ============================================================
-# IMAGE → VIDEO
+# GENERATE VIDEO FROM IMAGE
 # ============================================================
 
 def generate_video_from_image(
@@ -492,7 +497,9 @@ def generate_video_from_image(
 
     progress_placeholder.empty()
 
-    generated_video = operation.response.generated_videos[0]
+    generated_video = (
+        operation.response.generated_videos[0]
+    )
 
     output_file = tempfile.NamedTemporaryFile(
         delete=False,
@@ -508,40 +515,108 @@ def generate_video_from_image(
 
 
 # ============================================================
+# ANALYZE VIDEO
+# ============================================================
+
+def analyze_video(
+    video_path,
+    prompt
+):
+
+    uploaded_file = client.files.upload(
+        file=video_path
+    )
+
+    while uploaded_file.state.name == "PROCESSING":
+
+        time.sleep(3)
+
+        uploaded_file = client.files.get(
+            name=uploaded_file.name
+        )
+
+    if uploaded_file.state.name == "FAILED":
+
+        raise RuntimeError(
+            "Gemini failed to process the uploaded video."
+        )
+
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=[
+            uploaded_file,
+            prompt
+        ]
+    )
+
+    return response.text
+
+
+# ============================================================
+# SESSION STATE
+# ============================================================
+
+if "messages" not in st.session_state:
+
+    st.session_state.messages = []
+
+
+if "study_points" not in st.session_state:
+
+    st.session_state.study_points = 0
+
+
+# ============================================================
 # SIDEBAR
 # ============================================================
 
-st.sidebar.title("🤖 SUP")
+with st.sidebar:
 
-st.sidebar.markdown(
-    """
-### AI Assistant
+    st.title("🤖 SUP")
 
-Choose what you want to do.
-"""
-)
+    st.caption(
+        "Your smart AI assistant"
+    )
 
-mode = st.sidebar.selectbox(
-    "Mode",
-    [
-        "Normal",
-        "Learn",
-        "Exam",
-        "Challenge",
-        "Debug",
-        "Viva",
-        "Revision",
-        "Teacher",
-        "Explain 3 Ways"
-    ]
-)
+    st.divider()
 
-st.sidebar.divider()
+    mode = st.selectbox(
+        "Choose Mode",
+        [
+            "Normal",
+            "Learn",
+            "Exam",
+            "Challenge",
+            "Debug",
+            "Viva",
+            "Revision",
+            "Teacher",
+            "Explain 3 Ways"
+        ]
+    )
 
-st.sidebar.metric(
-    "Study Points",
-    st.session_state.study_points
-)
+    st.divider()
+
+    st.subheader("📚 Learning Dashboard")
+
+    st.metric(
+        "Study Points",
+        st.session_state.study_points
+    )
+
+    if st.button("Reset Study Points"):
+
+        st.session_state.study_points = 0
+
+        st.rerun()
+
+    st.divider()
+
+    if st.button("🗑️ Clear Chat"):
+
+        st.session_state.messages = []
+
+        st.rerun()
 
 
 # ============================================================
@@ -549,511 +624,503 @@ st.sidebar.metric(
 # ============================================================
 
 st.title("🤖 SUP")
-st.caption(
-    "Your smart AI assistant"
+
+st.write(
+    "Your smart, friendly and slightly witty AI assistant."
 )
+
+
+# ============================================================
+# TABS
+# ============================================================
+
+chat_tab, studio_tab = st.tabs(
+    [
+        "💬 AI Assistant",
+        "🎬 SUP Studio"
+    ]
+)
+
+
+# ============================================================
+# AI CHAT TAB
+# ============================================================
+
+with chat_tab:
+
+    st.subheader(
+        f"Mode: {mode}"
+    )
+
+    # Display previous messages
+
+    for message in st.session_state.messages:
+
+        with st.chat_message(
+            message["role"]
+        ):
+
+            st.markdown(
+                message["content"]
+            )
+
+
+    # --------------------------------------------------------
+    # FILE UPLOAD
+    # --------------------------------------------------------
+
+    uploaded_study_file = st.file_uploader(
+        "📎 Upload a study file",
+        type=[
+            "pdf",
+            "txt",
+            "docx",
+            "pptx",
+            "csv",
+            "py",
+            "c",
+            "cpp",
+            "java",
+            "html",
+            "css",
+            "js",
+            "json"
+        ],
+        help="Upload a file and ask questions about it."
+    )
+
+
+    # --------------------------------------------------------
+    # CHAT INPUT
+    # --------------------------------------------------------
+
+    user_prompt = st.chat_input(
+        "Ask me anything..."
+    )
+
+
+    if user_prompt:
+
+        # Add user message
+
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        )
+
+        with st.chat_message("user"):
+
+            st.markdown(
+                user_prompt
+            )
+
+
+        # ----------------------------------------------------
+        # MODE INSTRUCTIONS
+        # ----------------------------------------------------
+
+        mode_instructions = {
+
+            "Normal":
+                "Answer normally and naturally.",
+
+            "Learn":
+                "Teach the topic step by step in simple language. Assume the student may be a beginner.",
+
+            "Exam":
+                "Answer from an exam point of view. Give accurate, concise, easy-to-write answers.",
+
+            "Challenge":
+                "Challenge the student with questions and small problems. Do not reveal the answer immediately.",
+
+            "Debug":
+                "Focus on finding programming errors and explaining exactly how to fix them.",
+
+            "Viva":
+                "Act like a teacher conducting a viva. Ask one question at a time and evaluate answers.",
+
+            "Revision":
+                "Give quick revision notes, key points, formulas and important concepts.",
+
+            "Teacher":
+                "Explain like a helpful teacher. Use examples and simple explanations.",
+
+            "Explain 3 Ways":
+                "Explain the concept in three ways: simple explanation, example, and technical explanation."
+        }
+
+
+        current_instruction = mode_instructions[
+            mode
+        ]
+
+
+        # ----------------------------------------------------
+        # BUILD PROMPT
+        # ----------------------------------------------------
+
+        final_prompt = f"""
+Current mode:
+{mode}
+
+Mode instructions:
+{current_instruction}
+
+User question:
+{user_prompt}
+"""
+
+
+        # ----------------------------------------------------
+        # HANDLE UPLOADED FILE
+        # ----------------------------------------------------
+
+        if uploaded_study_file:
+
+            try:
+
+                file_path = save_uploaded_file(
+                    uploaded_study_file
+                )
+
+                uploaded_gemini_file = client.files.upload(
+                    file=file_path
+                )
+
+                while (
+                    uploaded_gemini_file.state.name
+                    == "PROCESSING"
+                ):
+
+                    time.sleep(2)
+
+                    uploaded_gemini_file = client.files.get(
+                        name=uploaded_gemini_file.name
+                    )
+
+
+                final_prompt = f"""
+The user uploaded this file:
+
+{uploaded_study_file.name}
+
+Use the uploaded file as the main source when answering.
+
+Current mode:
+{mode}
+
+Mode instructions:
+{current_instruction}
+
+User question:
+{user_prompt}
+
+If the answer is not present in the file, clearly say so
+and then provide useful general knowledge if appropriate.
+"""
+
+
+                contents = [
+                    uploaded_gemini_file,
+                    final_prompt
+                ]
+
+
+            except Exception as e:
+
+                st.error(
+                    f"Could not process the file: {e}"
+                )
+
+                contents = final_prompt
+
+        else:
+
+            contents = final_prompt
+
+
+        # ----------------------------------------------------
+        # GENERATE RESPONSE
+        # ----------------------------------------------------
+
+        with st.chat_message("assistant"):
+
+            try:
+
+                answer = generate_text(
+                    contents
+                )
+
+                st.markdown(
+                    answer
+                )
+
+                # Increase study points for learning modes
+
+                if mode in [
+                    "Learn",
+                    "Exam",
+                    "Revision",
+                    "Teacher",
+                    "Viva"
+                ]:
+
+                    st.session_state.study_points += 10
+
+
+            except Exception as e:
+
+                answer = (
+                    "Sorry, I ran into an error.\n\n"
+                    f"`{e}`"
+                )
+
+                st.error(
+                    answer
+                )
+
+
+        # Save assistant response
+
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
 
 
 # ============================================================
 # SUP STUDIO
 # ============================================================
 
-with st.expander("🎬 SUP Studio — Video Tools"):
+with studio_tab:
 
-    studio_tab1, studio_tab2, studio_tab3 = st.tabs(
+    st.header("🎬 SUP Studio")
+
+    st.write(
+        "Generate, analyze and edit videos using online AI and FFmpeg."
+    )
+
+    if not check_ffmpeg():
+
+        st.warning(
+            "FFmpeg is not currently available. "
+            "Make sure `packages.txt` contains `ffmpeg`."
+        )
+
+
+    studio_option = st.selectbox(
+        "Choose a Studio Tool",
         [
-            "✨ Generate",
-            "🎞️ Edit",
-            "🔍 Analyze"
+            "Text → Video",
+            "Image → Video",
+            "Analyze Video",
+            "Trim Video",
+            "Merge Videos",
+            "Resize Video",
+            "Extract Audio"
         ]
     )
 
-    # --------------------------------------------------------
-    # GENERATE TAB
-    # --------------------------------------------------------
 
-    with studio_tab1:
+    # ========================================================
+    # TEXT TO VIDEO
+    # ========================================================
 
-        st.subheader("✨ AI Video Generation")
+    if studio_option == "Text → Video":
 
-        generation_type = st.radio(
-            "Generation type",
-            [
-                "Text → Video",
-                "Image → Video"
-            ],
-            horizontal=True
+        st.subheader(
+            "🎬 Text → Video"
+        )
+
+        prompt = st.text_area(
+            "Describe the video you want",
+            placeholder=(
+                "Example: A cinematic drone shot flying "
+                "over a futuristic city at sunset."
+            ),
+            height=150
         )
 
         aspect_ratio = st.selectbox(
-            "Aspect ratio",
+            "Aspect Ratio",
             [
                 "16:9",
                 "9:16"
             ]
         )
 
-        if generation_type == "Text → Video":
+        if st.button(
+            "Generate Video",
+            type="primary"
+        ):
 
-            prompt = st.text_area(
-                "Describe the video you want",
-                placeholder=(
-                    "Example: A cinematic drone shot flying "
-                    "over a futuristic city at sunset, "
-                    "realistic lighting, smooth camera movement."
-                ),
-                height=150
-            )
+            if not prompt.strip():
 
-            if st.button(
-                "🎬 Generate Video",
-                type="primary"
-            ):
-
-                if not prompt.strip():
-
-                    st.warning(
-                        "Please enter a video description."
-                    )
-
-                else:
-
-                    try:
-
-                        with st.spinner(
-                            "Generating video..."
-                        ):
-
-                            video_path = generate_video(
-                                prompt,
-                                aspect_ratio
-                            )
-
-                        st.success(
-                            "Video generated successfully!"
-                        )
-
-                        st.video(video_path)
-
-                        with open(
-                            video_path,
-                            "rb"
-                        ) as video_file:
-
-                            st.download_button(
-                                "⬇️ Download Video",
-                                video_file,
-                                file_name="generated_video.mp4",
-                                mime="video/mp4"
-                            )
-
-                    except Exception as e:
-
-                        st.error(
-                            f"Video generation failed:\n{e}"
-                        )
-
-        else:
-
-            image_file = st.file_uploader(
-                "Upload an image",
-                type=[
-                    "png",
-                    "jpg",
-                    "jpeg",
-                    "webp"
-                ]
-            )
-
-            prompt = st.text_area(
-                "Describe how the image should move",
-                placeholder=(
-                    "Example: Slowly zoom into the scene "
-                    "while the trees move naturally in the wind."
-                ),
-                height=150
-            )
-
-            if image_file:
-
-                st.image(
-                    image_file,
-                    caption="Input image",
-                    use_container_width=True
+                st.warning(
+                    "Please enter a video description."
                 )
 
-            if st.button(
-                "🎬 Generate From Image",
-                type="primary"
-            ):
+            else:
 
-                if image_file is None:
+                try:
 
-                    st.warning(
-                        "Please upload an image."
-                    )
+                    with st.spinner(
+                        "Generating video..."
+                    ):
 
-                elif not prompt.strip():
-
-                    st.warning(
-                        "Please describe the motion."
-                    )
-
-                else:
-
-                    try:
-
-                        with st.spinner(
-                            "Creating video..."
-                        ):
-
-                            video_path = generate_video_from_image(
-                                image_file.getvalue(),
-                                image_file.type,
-                                prompt,
-                                aspect_ratio
-                            )
-
-                        st.success(
-                            "Video generated successfully!"
+                        video_path = generate_video(
+                            prompt,
+                            aspect_ratio
                         )
 
-                        st.video(video_path)
+                    st.success(
+                        "Video generated successfully!"
+                    )
 
-                        with open(
-                            video_path,
-                            "rb"
-                        ) as video_file:
+                    st.video(
+                        video_path
+                    )
 
-                            st.download_button(
-                                "⬇️ Download Video",
-                                video_file,
-                                file_name="image_to_video.mp4",
-                                mime="video/mp4"
-                            )
+                    with open(
+                        video_path,
+                        "rb"
+                    ) as video_file:
 
-                    except Exception as e:
-
-                        st.error(
-                            f"Image-to-video failed:\n{e}"
+                        st.download_button(
+                            "⬇️ Download Video",
+                            video_file,
+                            file_name="generated_video.mp4",
+                            mime="video/mp4"
                         )
 
+                except Exception as e:
 
-    # --------------------------------------------------------
-    # EDIT TAB
-    # --------------------------------------------------------
+                    st.error(
+                        f"Video generation failed:\n\n{e}"
+                    )
 
-    with studio_tab2:
 
-        st.subheader("🎞️ Online Video Editor")
+    # ========================================================
+    # IMAGE TO VIDEO
+    # ========================================================
 
-        if not check_ffmpeg():
+    elif studio_option == "Image → Video":
 
-            st.error(
-                "FFmpeg is not available on the Streamlit Cloud server."
-            )
+        st.subheader(
+            "🖼️ Image → Video"
+        )
 
-            st.info(
-                "Make sure packages.txt contains: ffmpeg"
-            )
+        image_file = st.file_uploader(
+            "Upload an image",
+            type=[
+                "png",
+                "jpg",
+                "jpeg",
+                "webp"
+            ]
+        )
+
+        prompt = st.text_area(
+            "Describe how the image should move",
+            placeholder=(
+                "Example: Slowly zoom toward the subject "
+                "while the background moves naturally."
+            ),
+            height=120
+        )
+
+        aspect_ratio = st.selectbox(
+            "Aspect Ratio",
+            [
+                "16:9",
+                "9:16"
+            ],
+            key="image_video_ratio"
+        )
+
+
+        if st.button(
+            "Generate From Image",
+            type="primary"
+        ):
+
+            if image_file is None:
+
+                st.warning(
+                    "Please upload an image first."
+                )
+
+            elif not prompt.strip():
+
+                st.warning(
+                    "Please describe the desired motion."
+                )
+
+            else:
+
+                try:
+
+                    image_bytes = image_file.getvalue()
+
+                    mime_type = (
+                        image_file.type
+                        or "image/png"
+                    )
+
+                    with st.spinner(
+                        "Creating video from image..."
+                    ):
+
+                        video_path = generate_video_from_image(
+                            image_bytes,
+                            mime_type,
+                            prompt,
+                            aspect_ratio
+                        )
+
+                    st.success(
+                        "Video created successfully!"
+                    )
+
+                    st.video(
+                        video_path
+                    )
+
+                    with open(
+                        video_path,
+                        "rb"
+                    ) as video_file:
+
+                        st.download_button(
+                            "⬇️ Download Video",
+                            video_file,
+                            file_name="image_to_video.mp4",
+                            mime="video/mp4"
+                        )
+
+                except Exception as e:
+
+                    st.error(
+                        f"Image-to-video failed:\n\n{e}"
+                    )
+
+
+    # ========================================================
+    # ANALYZE VIDEO
+    # ========================================================
+
+    elif studio_option == "Analyze Video":
+
+        st.subheader(
+            "🔍 Analyze Video"
+        )
 
         video_file = st.file_uploader(
             "Upload a video",
-            type=[
-                "mp4",
-                "mov",
-                "avi",
-                "mkv",
-                "webm"
-            ],
-            key="editor_video"
-        )
-
-        if video_file:
-
-            st.video(video_file)
-
-            editing_operation = st.selectbox(
-                "Choose editing operation",
-                [
-                    "Trim Video",
-                    "Resize Video",
-                    "Extract Audio",
-                    "Merge Videos"
-                ]
-            )
-
-            # ------------------------------------------------
-            # TRIM
-            # ------------------------------------------------
-
-            if editing_operation == "Trim Video":
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-
-                    start_time = st.number_input(
-                        "Start time (seconds)",
-                        min_value=0.0,
-                        value=0.0,
-                        step=1.0
-                    )
-
-                with col2:
-
-                    duration = st.number_input(
-                        "Duration (seconds)",
-                        min_value=0.1,
-                        value=5.0,
-                        step=1.0
-                    )
-
-                if st.button(
-                    "✂️ Trim Video",
-                    type="primary"
-                ):
-
-                    try:
-
-                        input_path = save_uploaded_file(
-                            video_file
-                        )
-
-                        with st.spinner(
-                            "Trimming video on the cloud..."
-                        ):
-
-                            output_path = trim_video(
-                                input_path,
-                                start_time,
-                                duration
-                            )
-
-                        st.success(
-                            "Video trimmed successfully!"
-                        )
-
-                        st.video(output_path)
-
-                        with open(
-                            output_path,
-                            "rb"
-                        ) as output_file:
-
-                            st.download_button(
-                                "⬇️ Download Trimmed Video",
-                                output_file,
-                                file_name="trimmed_video.mp4",
-                                mime="video/mp4"
-                            )
-
-                    except Exception as e:
-
-                        st.error(
-                            f"Trimming failed:\n{e}"
-                        )
-
-
-            # ------------------------------------------------
-            # RESIZE
-            # ------------------------------------------------
-
-            elif editing_operation == "Resize Video":
-
-                resolution = st.selectbox(
-                    "Resolution",
-                    [
-                        "1920x1080",
-                        "1280x720",
-                        "1080x1920",
-                        "720x1280",
-                        "854x480"
-                    ]
-                )
-
-                width, height = map(
-                    int,
-                    resolution.split("x")
-                )
-
-                if st.button(
-                    "📐 Resize Video",
-                    type="primary"
-                ):
-
-                    try:
-
-                        input_path = save_uploaded_file(
-                            video_file
-                        )
-
-                        with st.spinner(
-                            "Resizing video on the cloud..."
-                        ):
-
-                            output_path = resize_video(
-                                input_path,
-                                width,
-                                height
-                            )
-
-                        st.success(
-                            "Video resized successfully!"
-                        )
-
-                        st.video(output_path)
-
-                        with open(
-                            output_path,
-                            "rb"
-                        ) as output_file:
-
-                            st.download_button(
-                                "⬇️ Download Resized Video",
-                                output_file,
-                                file_name="resized_video.mp4",
-                                mime="video/mp4"
-                            )
-
-                    except Exception as e:
-
-                        st.error(
-                            f"Resize failed:\n{e}"
-                        )
-
-
-            # ------------------------------------------------
-            # EXTRACT AUDIO
-            # ------------------------------------------------
-
-            elif editing_operation == "Extract Audio":
-
-                if st.button(
-                    "🎵 Extract Audio",
-                    type="primary"
-                ):
-
-                    try:
-
-                        input_path = save_uploaded_file(
-                            video_file
-                        )
-
-                        with st.spinner(
-                            "Extracting audio on the cloud..."
-                        ):
-
-                            output_path = extract_audio(
-                                input_path
-                            )
-
-                        st.success(
-                            "Audio extracted successfully!"
-                        )
-
-                        st.audio(output_path)
-
-                        with open(
-                            output_path,
-                            "rb"
-                        ) as output_file:
-
-                            st.download_button(
-                                "⬇️ Download Audio",
-                                output_file,
-                                file_name="extracted_audio.mp3",
-                                mime="audio/mpeg"
-                            )
-
-                    except Exception as e:
-
-                        st.error(
-                            f"Audio extraction failed:\n{e}"
-                        )
-
-
-            # ------------------------------------------------
-            # MERGE
-            # ------------------------------------------------
-
-            elif editing_operation == "Merge Videos":
-
-                second_video = st.file_uploader(
-                    "Upload the second video",
-                    type=[
-                        "mp4",
-                        "mov",
-                        "avi",
-                        "mkv",
-                        "webm"
-                    ],
-                    key="second_video"
-                )
-
-                if second_video:
-
-                    if st.button(
-                        "🔗 Merge Videos",
-                        type="primary"
-                    ):
-
-                        try:
-
-                            first_path = save_uploaded_file(
-                                video_file
-                            )
-
-                            second_path = save_uploaded_file(
-                                second_video
-                            )
-
-                            with st.spinner(
-                                "Merging videos on the cloud..."
-                            ):
-
-                                output_path = merge_videos(
-                                    [
-                                        first_path,
-                                        second_path
-                                    ]
-                                )
-
-                            st.success(
-                                "Videos merged successfully!"
-                            )
-
-                            st.video(output_path)
-
-                            with open(
-                                output_path,
-                                "rb"
-                            ) as output_file:
-
-                                st.download_button(
-                                    "⬇️ Download Merged Video",
-                                    output_file,
-                                    file_name="merged_video.mp4",
-                                    mime="video/mp4"
-                                )
-
-                        except Exception as e:
-
-                            st.error(
-                                f"Merge failed:\n{e}"
-                            )
-
-
-    # --------------------------------------------------------
-    # ANALYZE TAB
-    # --------------------------------------------------------
-
-    with studio_tab3:
-
-        st.subheader("🔍 AI Video Analysis")
-
-        analysis_video = st.file_uploader(
-            "Upload a video to analyze",
             type=[
                 "mp4",
                 "mov",
@@ -1067,42 +1134,38 @@ with st.expander("🎬 SUP Studio — Video Tools"):
         analysis_prompt = st.text_area(
             "What should I analyze?",
             value=(
-                "Describe what happens in this video. "
-                "Identify important events, objects, "
-                "actions and notable details."
+                "Describe what happens in this video "
+                "and identify the important events."
             ),
             height=120
         )
 
-        if analysis_video:
-
-            st.video(analysis_video)
 
         if st.button(
-            "🔎 Analyze Video",
+            "Analyze Video",
             type="primary"
         ):
 
-            if analysis_video is None:
+            if video_file is None:
 
                 st.warning(
-                    "Please upload a video first."
+                    "Please upload a video."
                 )
 
             else:
 
                 try:
 
-                    input_path = save_uploaded_file(
-                        analysis_video
+                    video_path = save_uploaded_file(
+                        video_file
                     )
 
                     with st.spinner(
-                        "Analyzing video with Gemini..."
+                        "Analyzing video..."
                     ):
 
                         result = analyze_video(
-                            input_path,
+                            video_path,
                             analysis_prompt
                         )
 
@@ -1110,161 +1173,396 @@ with st.expander("🎬 SUP Studio — Video Tools"):
                         "Analysis complete!"
                     )
 
-                    st.markdown(result)
+                    st.markdown(
+                        result
+                    )
 
                 except Exception as e:
 
                     st.error(
-                        f"Video analysis failed:\n{e}"
+                        f"Video analysis failed:\n\n{e}"
+                    )
+
+
+    # ========================================================
+    # TRIM VIDEO
+    # ========================================================
+
+    elif studio_option == "Trim Video":
+
+        st.subheader(
+            "✂️ Trim Video"
+        )
+
+        video_file = st.file_uploader(
+            "Upload a video",
+            type=[
+                "mp4",
+                "mov",
+                "avi",
+                "mkv",
+                "webm"
+            ],
+            key="trim_video"
+        )
+
+        start_time = st.number_input(
+            "Start time (seconds)",
+            min_value=0.0,
+            value=0.0,
+            step=0.5
+        )
+
+        duration = st.number_input(
+            "Duration (seconds)",
+            min_value=0.1,
+            value=5.0,
+            step=0.5
+        )
+
+
+        if st.button(
+            "Trim Video",
+            type="primary"
+        ):
+
+            if video_file is None:
+
+                st.warning(
+                    "Please upload a video."
+                )
+
+            else:
+
+                try:
+
+                    input_path = save_uploaded_file(
+                        video_file
+                    )
+
+                    with st.spinner(
+                        "Trimming video..."
+                    ):
+
+                        output_path = trim_video(
+                            input_path,
+                            start_time,
+                            duration
+                        )
+
+                    st.success(
+                        "Video trimmed successfully!"
+                    )
+
+                    st.video(
+                        output_path
+                    )
+
+                    with open(
+                        output_path,
+                        "rb"
+                    ) as output_file:
+
+                        st.download_button(
+                            "⬇️ Download Trimmed Video",
+                            output_file,
+                            file_name="trimmed_video.mp4",
+                            mime="video/mp4"
+                        )
+
+                except Exception as e:
+
+                    st.error(
+                        f"Video trimming failed:\n\n{e}"
+                    )
+
+
+    # ========================================================
+    # MERGE VIDEOS
+    # ========================================================
+
+    elif studio_option == "Merge Videos":
+
+        st.subheader(
+            "🔗 Merge Videos"
+        )
+
+        video_files = st.file_uploader(
+            "Upload multiple videos",
+            type=[
+                "mp4",
+                "mov",
+                "avi",
+                "mkv",
+                "webm"
+            ],
+            accept_multiple_files=True,
+            key="merge_videos"
+        )
+
+        if video_files:
+
+            st.write(
+                f"{len(video_files)} video(s) selected."
+            )
+
+            for file in video_files:
+
+                st.write(
+                    f"• {file.name}"
+                )
+
+
+        if st.button(
+            "Merge Videos",
+            type="primary"
+        ):
+
+            if not video_files:
+
+                st.warning(
+                    "Please upload at least two videos."
+                )
+
+            elif len(video_files) < 2:
+
+                st.warning(
+                    "Please upload at least two videos to merge."
+                )
+
+            else:
+
+                try:
+
+                    video_paths = []
+
+                    for file in video_files:
+
+                        path = save_uploaded_file(
+                            file
+                        )
+
+                        video_paths.append(
+                            path
+                        )
+
+
+                    with st.spinner(
+                        "Merging videos..."
+                    ):
+
+                        output_path = merge_videos(
+                            video_paths
+                        )
+
+
+                    st.success(
+                        "Videos merged successfully!"
+                    )
+
+                    st.video(
+                        output_path
+                    )
+
+
+                    with open(
+                        output_path,
+                        "rb"
+                    ) as output_file:
+
+                        st.download_button(
+                            "⬇️ Download Merged Video",
+                            output_file,
+                            file_name="merged_video.mp4",
+                            mime="video/mp4"
+                        )
+
+
+                except Exception as e:
+
+                    st.error(
+                        f"Video merging failed:\n\n{e}"
+                    )
+
+
+    # ========================================================
+    # RESIZE VIDEO
+    # ========================================================
+
+    elif studio_option == "Resize Video":
+
+        st.subheader(
+            "📐 Resize Video"
+        )
+
+        video_file = st.file_uploader(
+            "Upload a video",
+            type=[
+                "mp4",
+                "mov",
+                "avi",
+                "mkv",
+                "webm"
+            ],
+            key="resize_video"
+        )
+
+
+        preset = st.selectbox(
+            "Choose Resolution",
+            [
+                "1920x1080",
+                "1280x720",
+                "1080x1920",
+                "720x1280",
+                "854x480",
+                "640x360"
+            ]
+        )
+
+
+        width, height = map(
+            int,
+            preset.split("x")
+        )
+
+
+        if st.button(
+            "Resize Video",
+            type="primary"
+        ):
+
+            if video_file is None:
+
+                st.warning(
+                    "Please upload a video."
+                )
+
+            else:
+
+                try:
+
+                    input_path = save_uploaded_file(
+                        video_file
+                    )
+
+                    with st.spinner(
+                        "Resizing video..."
+                    ):
+
+                        output_path = resize_video(
+                            input_path,
+                            width,
+                            height
+                        )
+
+                    st.success(
+                        "Video resized successfully!"
+                    )
+
+                    st.video(
+                        output_path
+                    )
+
+                    with open(
+                        output_path,
+                        "rb"
+                    ) as output_file:
+
+                        st.download_button(
+                            "⬇️ Download Resized Video",
+                            output_file,
+                            file_name="resized_video.mp4",
+                            mime="video/mp4"
+                        )
+
+                except Exception as e:
+
+                    st.error(
+                        f"Video resizing failed:\n\n{e}"
+                    )
+
+
+    # ========================================================
+    # EXTRACT AUDIO
+    # ========================================================
+
+    elif studio_option == "Extract Audio":
+
+        st.subheader(
+            "🎵 Extract Audio"
+        )
+
+        video_file = st.file_uploader(
+            "Upload a video",
+            type=[
+                "mp4",
+                "mov",
+                "avi",
+                "mkv",
+                "webm"
+            ],
+            key="audio_video"
+        )
+
+
+        if st.button(
+            "Extract Audio",
+            type="primary"
+        ):
+
+            if video_file is None:
+
+                st.warning(
+                    "Please upload a video."
+                )
+
+            else:
+
+                try:
+
+                    input_path = save_uploaded_file(
+                        video_file
+                    )
+
+                    with st.spinner(
+                        "Extracting audio..."
+                    ):
+
+                        audio_path = extract_audio(
+                            input_path
+                        )
+
+                    st.success(
+                        "Audio extracted successfully!"
+                    )
+
+
+                    with open(
+                        audio_path,
+                        "rb"
+                    ) as audio_file:
+
+                        st.download_button(
+                            "⬇️ Download Audio",
+                            audio_file,
+                            file_name="extracted_audio.mp3",
+                            mime="audio/mpeg"
+                        )
+
+                except Exception as e:
+
+                    st.error(
+                        f"Audio extraction failed:\n\n{e}"
                     )
 
 
 # ============================================================
-# LEARNING MODES
+# FOOTER
 # ============================================================
 
-mode_instructions = {
+st.divider()
 
-    "Normal": """
-Answer the user's question naturally and directly.
-""",
-
-    "Learn": """
-Teach the topic step by step.
-Assume the user may be a beginner.
-Use simple explanations and examples.
-""",
-
-    "Exam": """
-Give an exam-oriented answer.
-Focus on definitions, important points,
-steps, examples and likely marks.
-""",
-
-    "Challenge": """
-Turn the topic into a short challenge or quiz.
-Ask questions one at a time.
-""",
-
-    "Debug": """
-Help debug programming code.
-Identify the error, explain why it happens,
-then provide the corrected code.
-""",
-
-    "Viva": """
-Act like a teacher conducting a viva.
-Ask one question at a time and evaluate the answer.
-""",
-
-    "Revision": """
-Create concise revision notes.
-Focus on the most important concepts.
-""",
-
-    "Teacher": """
-Explain the topic like a good teacher.
-Use examples and check understanding.
-""",
-
-    "Explain 3 Ways": """
-Explain the answer in three ways:
-1. Very simple
-2. Normal
-3. Technical
-"""
-}
-
-
-# ============================================================
-# CHAT DISPLAY
-# ============================================================
-
-for message in st.session_state.messages:
-
-    with st.chat_message(message["role"]):
-
-        st.markdown(message["content"])
-
-
-# ============================================================
-# CHAT INPUT
-# ============================================================
-
-user_prompt = st.chat_input(
-    "Ask me anything..."
+st.caption(
+    "AI assistant • Study tools • AI video generation • Video tools"
 )
-
-
-if user_prompt:
-
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": user_prompt
-        }
-    )
-
-    with st.chat_message("user"):
-
-        st.markdown(user_prompt)
-
-    mode_instruction = mode_instructions.get(
-        mode,
-        mode_instructions["Normal"]
-    )
-
-    conversation = []
-
-    for message in st.session_state.messages:
-
-        conversation.append(
-            f'{message["role"].upper()}: {message["content"]}'
-        )
-
-    full_prompt = f"""
-Current mode: {mode}
-
-Mode instructions:
-{mode_instruction}
-
-Conversation:
-{chr(10).join(conversation)}
-
-Respond to the latest user message.
-"""
-
-    with st.chat_message("assistant"):
-
-        try:
-
-            response = generate_text(
-                full_prompt
-            )
-
-            st.markdown(response)
-
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": response
-                }
-            )
-
-            st.session_state.study_points += 1
-
-        except Exception as e:
-
-            error_message = (
-                "I couldn't generate a response right now.\n\n"
-                f"Error: {e}"
-            )
-
-            st.error(error_message)
-
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": error_message
-                }
-            )
