@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 import os
 import time
@@ -1725,4 +1725,4 @@ with tab_study:
         - Make revision notes for discrete mathematics.
         """
     )
-```
+
